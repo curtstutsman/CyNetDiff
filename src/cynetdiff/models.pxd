@@ -86,3 +86,32 @@ cdef class LinearThresholdModel(DiffusionModel):
         unsigned int num_trials,
         float[:] _node_thresholds
     )
+
+cdef class PressureThresholdModel(DiffusionModel):
+    cdef readonly float[:] influence
+    cdef float alpha
+
+    # Model simulation data structures
+    cdef cdeque[unsigned int] work_deque
+    cdef cset[unsigned int] seen_set
+    cdef cmap[unsigned int, float] thresholds
+    cdef cmap[unsigned int, float] buckets
+
+    # Mostly for testing
+    cpdef void _assign_thresholds(self, float[:] _node_thresholds)
+
+    cdef int _advance_model(
+        self,
+        cdeque[unsigned int]& work_deque,
+        cset[unsigned int]& seen_set,
+        cmap[unsigned int, float]& thresholds,
+        cmap[unsigned int, float]& buckets,
+    ) except -1 nogil
+
+    cdef cvector[float] _compute_marginal_gains(
+        self,
+        cvector[unsigned int]& original_seeds,
+        cvector[unsigned int]& new_seeds,
+        unsigned int num_trials,
+        float[:] _node_thresholds
+    )

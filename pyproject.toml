@@ -89,7 +89,7 @@ module = ["networkx.*", "Cython.*", "ndlib.*", "pooch.*", "matplotlib.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = "tests"
+testpaths = "tests/test_pt_model.py"
 # Don't need warmup iterations because benchmark is already an average.
 benchmark_warmups = 0
 

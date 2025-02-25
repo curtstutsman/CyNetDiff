@@ -329,3 +329,79 @@ class LinearThresholdModel(DiffusionModel):
         >>> model.compute_marginal_gains([0, 1, 2], [3, 4], 100)
         [3.0, 1.0, 1.0]
         """
+
+class PressureThresholdModel(DiffusionModel):
+    """
+    A Diffusion Model representing the Pressure Linear Threshold process. This class is a
+    subclass of the DiffusionModel and provides specific implementations for the
+    Pressure Linear Threshold diffusion process.
+
+    Parameters
+    ----------
+    starts : array.array
+        An array of start indices for each node's edges in the edge array. Type
+        of array elements must be `unsigned int`.
+    edges : array.array
+        An array of edges represented as integer indices of nodes. Type
+        of array elements must be `unsigned int`.
+    payoffs : array.array
+        An array of payoffs for each node if activated. Type of array elements must be `float`.
+    influence : array.array, optional
+        An array of influence values for each edge. Array elements must be
+        `float`s in [`0.0`,`1.0`]. If not set, the inverse of the in-degree of a node
+        is used for the influence.
+    rng : np.random.Generator | np.random.BitGenerator | None, optional
+        Random number generator to use for the model. If not set, creates a new generator by default.
+    """
+
+    def __init__(
+        self,
+        starts: array.array,
+        edges: array.array,
+        *,
+        payoffs: t.Optional[array.array] = None,
+        influence: t.Optional[array.array] = None,
+        alpha: float = 0.1,
+        rng: RNGType = None,
+    ) -> None: ...
+    def _assign_thresholds(self, node_thresholds: array.array) -> None:
+        """
+        Assigns activation thresholds from the given array. Should mainly be used for
+        testing.
+        """
+        ...
+
+    def compute_marginal_gains(
+        self,
+        seed_set: t.Iterable[int],
+        new_seeds: t.List[int],
+        num_trials: int,
+        *,
+        _node_thresholds: t.Optional[array.array] = None,
+    ) -> t.List[float]:
+        """
+        Computes the marginal gain of adding each seed in new_seeds on top of the original seed_set.
+        Averages over num_trials number of randomized activations. Scores are computed using payoffs
+        if set, otherwise the number of activated nodes is used.
+
+        Parameters
+        ----------
+        seed_set : Iterable[int]
+            An iterable representing the current seed set. Can be empty.
+        new_seeds : List[int]
+            New seeds to compute marginal gains on. Can be empty.
+        num_trials : int
+            Number of randomized trials to run.
+
+        Returns
+        ----------
+        List[float]
+            List containing computed marginal gains. First entry is average influence of the
+            starting seed set. Following entries are marginal gains with the addition of vertices
+            from new_seeds in order. Has length len(new_seeds)+1.
+
+        Examples
+        ----------
+        >>> model.compute_marginal_gains([0, 1, 2], [3, 4], 100)
+        [3.0, 1.0, 1.0]
+        """

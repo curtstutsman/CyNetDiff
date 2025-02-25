@@ -11,7 +11,7 @@ from itertools import count
 import networkx as nx
 import numpy as np
 
-from cynetdiff.models import IndependentCascadeModel, LinearThresholdModel
+from cynetdiff.models import IndependentCascadeModel, LinearThresholdModel, PressureThresholdModel
 
 SeedLike = t.Union[int, np.integer, Sequence[int], np.random.SeedSequence]
 RNGLike = t.Union[np.random.Generator, np.random.BitGenerator]
@@ -325,6 +325,96 @@ def networkx_to_lt_model(
         edges,
         payoffs=payoffs,
         influence=influence,
+        rng=rng,
+    )
+
+    return model, node_mapping
+
+def networkx_to_pt_model(
+    graph: Graph,
+    alpha: float = 0.1,
+    rng: RNGType = None,
+) -> t.Tuple[PressureThresholdModel, NodeMappingDict]:
+    """
+    Converts a NetworkX graph into a Linear Threshold model. Includes influence
+    values if they are defined on each edge under the key `"influence"`.
+
+    Payoffs for each node are included if they are defined on each node under the key
+    `"payoff"`.
+
+    Parameters
+    ----------
+    graph : nx.Graph or nx.DiGraph
+        A NetworkX graph or directed graph.
+    rng : np.random.Generator | np.random.BitGenerator | None, optional
+        Random number generator to use for the model. If not set, creates a new generator by default.
+
+    Returns
+    -------
+    tuple[LinearThresholdModel, dict[Any, int]]
+        A tuple with the instance of LinearThresholdModel using the given graph
+        and a dictionary mapping the nodes of the graph to their integer labels in
+        the model.
+
+    Examples
+    --------
+    >>> import networkx as nx
+    >>> graph = nx.erdos_renyi_graph(10, 0.5)
+    >>> model, _ = networkx_to_lt_model(graph)
+    """
+
+    node_list = list(enumerate(graph.nodes(data=True)))
+    node_mapping = {node: i for i, (node, _) in node_list}
+
+    starts = array.array("I")
+    edges = array.array("I")
+
+    influence = None
+    payoffs = None
+
+    if next(iter(graph.nodes.data("payoff", None)))[1] is not None:
+        payoffs = array.array("f")
+
+    if next(iter(graph.edges.data("influence", None)))[2] is not None:
+        influence = array.array("f")
+
+    curr_successor = 0
+    for _, (node, data_dict) in node_list:
+        # First, add to out neighbors
+        starts.append(curr_successor)
+
+        if payoffs is not None:
+            payoffs.append(data_dict["payoff"])
+
+        for successor in graph.successors(node):
+            other = node_mapping[successor]
+            curr_successor += 1
+            edges.append(other)
+
+            if influence is not None:
+                edge_influence = graph[node][successor]["influence"]
+                influence.append(edge_influence)
+
+        if influence is not None:
+            # Check that in-sum is not too high.
+            pred_sum = 0.0
+
+            for predecessor in graph.predecessors(node):
+                pred_sum += graph[predecessor][node]["influence"]
+
+            # 1.0001 instead of 1.0 to avoid floating point issues.
+            # TODO will this annoy people?
+            if pred_sum > 1.0001:
+                raise ValueError(f"Node {node} has inward influence {pred_sum}, must be less than 1.0.")
+
+    check_csr_arrays(starts, edges)
+
+    model = PressureThresholdModel(
+        starts,
+        edges,
+        payoffs=payoffs,
+        influence=influence,
+        alpha=alpha,
         rng=rng,
     )
 
