@@ -332,7 +332,7 @@ def networkx_to_lt_model(
 
 def networkx_to_pt_model(
     graph: Graph,
-    alpha: float = 0.1,
+    alpha: float,
     rng: RNGType = None,
 ) -> t.Tuple[PressureThresholdModel, NodeMappingDict]:
     """
@@ -412,9 +412,9 @@ def networkx_to_pt_model(
     model = PressureThresholdModel(
         starts,
         edges,
+        alpha=alpha,
         payoffs=payoffs,
         influence=influence,
-        alpha=alpha,
         rng=rng,
     )
 

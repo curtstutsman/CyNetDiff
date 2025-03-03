@@ -3,12 +3,12 @@ import copy
 import math
 import random
 import typing as t
+import numpy as np
 
 import networkx as nx
 import pytest
 
 from cynetdiff.utils import networkx_to_pt_model
-from cynetdiff.utils import networkx_to_lt_model
 
 #    Code below adapted from code by
 #    Hung-Hsuan Chen <hhchen@psu.edu>
@@ -16,11 +16,10 @@ from cynetdiff.utils import networkx_to_lt_model
 #    BSD license.
 
 
-
 def pressure_threshold(
-    graph: t.Union[nx.Graph, nx.DiGraph], seeds: t.Iterable[int], alpha: float = 0.0, steps: int = 0
+    graph: t.Union[nx.Graph, nx.DiGraph], seeds: t.Iterable[int], alpha: float = 0, steps: int = 0
 ) -> t.List[t.List[int]]:
-    """Return the active nodes of each diffusion step by pressure threshold model
+    """Return the active nodes of each diffusion step by linear threshold model
 
     Parameters
     ----------
@@ -52,7 +51,7 @@ def pressure_threshold(
         The American journal of sociology, 1978.
     """
     if isinstance(graph, (nx.MultiGraph, nx.MultiDiGraph)):
-        raise Exception("linear_threshold() is not defined for graphs with multiedges.")
+        raise Exception("pressure_threshold() is not defined for graphs with multiedges.")
 
     # make sure the seeds are in the graph
     for s in seeds:
@@ -123,21 +122,26 @@ def _diffuse_k_rounds(graph, activated, alpha, steps):
 
 
 def _diffuse_one_round(graph, activated, alpha):
-	activated_nodes_of_this_round = set()
-	for s in activated:
-		nbs = graph.successors(s)
+    activated_nodes_of_this_round = set()
+    for s in activated:
+        nbs = graph.successors(s)
 
-		for nb in nbs:
-			if nb in activated:
-				continue
-			active_nb = list(set(graph.predecessors(nb)).intersection(set(activated)))
-			total_influence = _influence_sum(graph, active_nb, nb)
-			if total_influence >= graph._node[nb]["threshold"]:
-				activated_nodes_of_this_round.add(nb)
-	activated.extend(list(activated_nodes_of_this_round))
-	# for new_node in activated_nodes_of_this_round:
-	# 	_adjust_outgoing_influence(graph, new_node, alpha, activated)
-	return activated, list(activated_nodes_of_this_round)
+        for nb in nbs:
+            if nb in activated:
+                continue
+            active_nb = list(set(graph.predecessors(nb)).intersection(set(activated)))
+
+            if _influence_sum(graph, active_nb, nb) >= graph._node[nb]["threshold"]:
+                activated_nodes_of_this_round.add(nb)
+    activated.extend(list(activated_nodes_of_this_round))
+
+    # Adjust weights for newly activated
+    for s in activated_nodes_of_this_round:
+        active_nb = list(set(graph.predecessors(s)).intersection(set(activated)))
+        accumulated_influence = _influence_sum(graph, active_nb, s)
+        _adjust_outgoing_influence(graph, s, alpha, accumulated_influence, activated)
+
+    return activated, list(activated_nodes_of_this_round)
 
 
 def _influence_sum(graph, froms, to):
@@ -147,13 +151,12 @@ def _influence_sum(graph, froms, to):
 
     return influence_sum
 
-def _adjust_outgoing_influence(G, node, alpha, A):
-	for neighbor in G.successors(node):
-		active_nb = list(set(G.predecessors(neighbor)).intersection(set(A)))
-		total_influence = _influence_sum(G, active_nb, neighbor)
-		G[node][neighbor]['influence'] = min(
-			1.0, G[node][neighbor]['influence'] + alpha * total_influence
-		)
+def _adjust_outgoing_influence(G, node, alpha, total_influence, A):
+    for neighbor in G.successors(node):
+        if neighbor not in A:
+            G[node][neighbor]['influence'] = min(
+                1.0, G[node][neighbor]['influence'] + alpha * total_influence
+            )
 
 
 def generate_random_graph_from_seed(
@@ -201,16 +204,19 @@ def get_thresholds(graph: nx.DiGraph) -> array.array:
 
     return thresholds
 
+
+# Start of actual test code
+
+
 # @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-# @pytest.mark.parametrize("alpha", [0.1])
-# def test_randomized_activation(seed: int, alpha: float) -> None:
+# def test_randomized_activation(seed: int) -> None:
 #     n = 100
 #     k = 10
 #     p = 0.01
 
 #     # Create random graph and initialize model
 #     graph = generate_random_graph_from_seed(n, p, True, False, False, seed=seed)
-#     model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
+#     model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
 
 #     random.seed(seed)
 #     seeds = random.sample(list(graph.nodes), k)
@@ -226,16 +232,16 @@ def get_thresholds(graph: nx.DiGraph) -> array.array:
 #     for seed_node, prob in zip(seeds, seed_probs):
 #         assert (seed_node in activated_nodes) == (prob == 1.0)
 
+
 # @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-# @pytest.mark.parametrize("alpha", [0.1])
-# def test_model_payoffs(seed: int, alpha: float) -> None:
+# def test_model_payoffs(seed: int) -> None:
 #     n = 10_000
 #     k = 10
 #     p = 0.01
 
 #     # Just trying the main functions with no set thresholds
 #     graph = generate_random_graph_from_seed(n, p, True, False, True, seed=seed)
-#     model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
+#     model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
 #     random.seed(seed)
 #     seeds = set(random.sample(list(graph.nodes), k))
 
@@ -251,17 +257,17 @@ def get_thresholds(graph: nx.DiGraph) -> array.array:
 
 #     assert math.isclose(payoff_score, manual_score, abs_tol=0.05)
 
+
 # @pytest.mark.parametrize("directed", [True, False])
 # @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-# @pytest.mark.parametrize("alpha", [0.1])
-# def test_model_rng_seed(directed: bool, seed: int, alpha: float) -> None:
+# def test_model_rng_seed(directed: bool, seed: int) -> None:
 #     n = 10000
 #     k = 10
 #     p = 0.01
 #     num_runs = 10
 #     # Just trying the main functions with no set thresholds
 #     graph = generate_random_graph_from_seed(n, p, directed, False, False, seed=seed)
-#     model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
+#     model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
 
 #     random.seed(seed)
 #     seeds = set(random.sample(list(graph.nodes), k))
@@ -292,54 +298,59 @@ def get_thresholds(graph: nx.DiGraph) -> array.array:
 
 
 @pytest.mark.parametrize("directed", [True])
-@pytest.mark.parametrize("nondefault_influence", [True])
-@pytest.mark.parametrize("alpha", [0.1])
-def test_specific_model( alpha: float, directed: bool, nondefault_influence: bool) -> None:
-	n = 500
-	p = 0.05
-	k = 10
-	test_graph = generate_random_graph_from_seed(
-		n,
-		p,
-		directed=directed,
-		include_influence=nondefault_influence,
-		include_payoff=False,
-	)
+@pytest.mark.parametrize("nondefault_influence", [False])
+def test_specific_model(directed: bool, nondefault_influence: bool) -> None:
+    n = 20
+    p = 0.2
+    k = 1
+    seed=np.random.randint(1000, 10000)
+    test_graph = generate_random_graph_from_seed(
+        n,
+        p,
+        directed=directed,
+        include_influence=nondefault_influence,
+        include_payoff=False,
+        seed=5692
+    )
 
-	nodes = list(test_graph.nodes)
-	seeds = random.sample(nodes, k)
+    nodes = list(test_graph.nodes)
+    seeds = random.sample(nodes, k)
 
-	'''
-	Note that both of the pressure_threshold and pt model code have the adjustments that make them
-    more than just the linear threshold model COMMENTED OUT, meaning both the below should just be
-    implementing the linear threshold model, yet this test still fails. 
-	'''
-	activated_nodes_levels = pressure_threshold(test_graph, seeds, alpha)
-	model, _ = networkx_to_pt_model(test_graph, alpha)
+    activated_nodes_levels = pressure_threshold(test_graph, seeds, 0.1)
 
-	model.set_seeds(seeds)
-	seen_set = set()
+    model, _ = networkx_to_pt_model(test_graph, 0.1)
 
-	assert model.get_num_activated_nodes() == len(seeds)
-	assert len(sorted(model.get_newly_activated_nodes())) == len(seeds)
+    model.set_seeds(seeds)
+    seen_set = set()
 
-	model._assign_thresholds(get_thresholds(test_graph))
+    assert model.get_num_activated_nodes() == len(seeds)
+    assert len(sorted(model.get_newly_activated_nodes())) == len(seeds)
 
-	for node_level in activated_nodes_levels:
-		model_set = sorted(model.get_newly_activated_nodes())
-		node_set = sorted(node_level)
+    # print(sum(len(sublist) for sublist in activated_nodes_levels))
+    # print(get_thresholds(test_graph))
+    # print(list(test_graph.edges()))
+    # print("Influence values for edges:", list(model.influence))
 
-		# assert model_set == node_set
-		seen_set |= set(node_level)
-		model.advance_model()
+    model._assign_thresholds(get_thresholds(test_graph))
 
-	assert seen_set == set(model.get_activated_nodes())
+    for node_level in activated_nodes_levels:
+        model_set = sorted(model.get_newly_activated_nodes())
+        node_set = sorted(node_level)
 
-	# Resetting should change the total number of activated nodes
-	model.reset_model()
-	model.advance_until_completion()
+        # print(model_set)
+        # print(node_set)
 
-	assert seen_set != set(model.get_activated_nodes())
+        assert model_set == node_set
+        seen_set |= set(node_level)
+        model.advance_model()
+
+    assert seen_set == set(model.get_activated_nodes())
+
+    # Resetting should change the total number of activated nodes
+    model.reset_model()
+    model.advance_until_completion()
+
+    assert seen_set != set(model.get_activated_nodes())
 
 
 # def test_invalid_seed_error() -> None:
@@ -353,7 +364,7 @@ def test_specific_model( alpha: float, directed: bool, nondefault_influence: boo
 #         False,
 #     )
 
-#     model, _ = networkx_to_pt_model(test_graph, alpha=0.1)
+#     model, _ = networkx_to_pt_model(test_graph, 0)
 
 #     with pytest.raises(ValueError):
 #         model.set_seeds({-1})  # Insert a seed not in the graph
@@ -384,8 +395,7 @@ def test_specific_model( alpha: float, directed: bool, nondefault_influence: boo
 # @pytest.mark.parametrize("nondefault_influence", [True, False])
 # @pytest.mark.parametrize("include_payoffs", [True, False])
 # @pytest.mark.parametrize("seed", [12345, 505050])
-# @pytest.mark.parametrize("alpha", [0.1])
-# def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payoffs: bool, seed: int, alpha:float) -> None:
+# def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payoffs: bool, seed: int) -> None:
 #     """
 #     Test the marginal gain function under a couple of parameter settings.
 #     """
@@ -399,11 +409,11 @@ def test_specific_model( alpha: float, directed: bool, nondefault_influence: boo
 #     seeds = random.sample(nodes, k)
 
 #     # Set up the model
-#     model, _ = networkx_to_pt_model(test_graph, alpha=alpha)
+#     model, _ = networkx_to_pt_model(test_graph, 0)
 #     node_thresholds = get_thresholds(test_graph)
 
 #     result = model.compute_marginal_gains(seeds, [], 1, _node_thresholds=node_thresholds)[0]
-#     total_activated = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, seeds, alpha=alpha))
+#     total_activated = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, seeds, 0))
 
 #     assert math.isclose(result, total_activated, abs_tol=0.05)
 
@@ -415,9 +425,9 @@ def test_specific_model( alpha: float, directed: bool, nondefault_influence: boo
 #     set_so_far: t.List[int] = []
 
 #     for seed, result in zip(seeds, results[1:]):
-#         without_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far, alpha=alpha))
+#         without_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far, 0))
 
-#         with_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far + [seed], alpha=alpha))
+#         with_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far + [seed], 0))
 
 #         marg_gain = with_new_seed_total - without_new_seed_total
 

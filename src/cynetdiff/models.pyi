@@ -330,11 +330,12 @@ class LinearThresholdModel(DiffusionModel):
         [3.0, 1.0, 1.0]
         """
 
+
 class PressureThresholdModel(DiffusionModel):
     """
-    A Diffusion Model representing the Pressure Linear Threshold process. This class is a
+    A Diffusion Model representing the Linear Threshold process. This class is a
     subclass of the DiffusionModel and provides specific implementations for the
-    Pressure Linear Threshold diffusion process.
+    Linear Threshold diffusion process.
 
     Parameters
     ----------
@@ -344,6 +345,8 @@ class PressureThresholdModel(DiffusionModel):
     edges : array.array
         An array of edges represented as integer indices of nodes. Type
         of array elements must be `unsigned int`.
+    alpha : float
+        A float value used to control strength of pressure effect
     payoffs : array.array
         An array of payoffs for each node if activated. Type of array elements must be `float`.
     influence : array.array, optional
@@ -358,10 +361,10 @@ class PressureThresholdModel(DiffusionModel):
         self,
         starts: array.array,
         edges: array.array,
+        alpha: float,
         *,
         payoffs: t.Optional[array.array] = None,
         influence: t.Optional[array.array] = None,
-        alpha: float = 0.1,
         rng: RNGType = None,
     ) -> None: ...
     def _assign_thresholds(self, node_thresholds: array.array) -> None:
