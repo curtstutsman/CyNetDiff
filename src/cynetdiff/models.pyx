@@ -2,7 +2,7 @@
 from cpython cimport array
 from libcpp.deque cimport deque as cdeque
 from libcpp.unordered_set cimport unordered_set as cset
-from libcpp.algorithm cimport fill
+from libcpp.algorithm cimport fill, find
 from libcpp.vector cimport vector as cvector
 from libcpp.unordered_map cimport unordered_map as cmap
 from libc.math cimport fmin
@@ -603,9 +603,7 @@ cdef class PressureThresholdModel(DiffusionModel):
 
         # Setting the influence sent across each edge
         if influence is not None:
-            # If provided, copy from user code
-            assert m == len(influence)
-            self.influence = influence
+            raise NotImplementedError("Non-default influence values not currently supported")
         else:
             # Otherwise, default to 1/in_degree
             in_degrees.resize(n)
@@ -652,7 +650,7 @@ cdef class PressureThresholdModel(DiffusionModel):
                     self.work_deque.push_back(self.original_seeds[i])
                     self.seen_set.insert(self.original_seeds[i])
 
-        # Reset edge weights to 1 / in_degree (not implemented for custom influence weights)
+        """Reset edge weights to 1 / in_degree (not implemented for custom influence weights)"""
         cdef cvector[unsigned int] in_degrees
         cdef unsigned int n = len(self.starts)
         in_degrees.resize(n)
@@ -821,6 +819,7 @@ cdef class PressureThresholdModel(DiffusionModel):
         cdef float threshold
         cdef float updated_weight
 
+        # Find new activations in this phase
         for _ in range(q):
             node = work_deque.front()
             work_deque.pop_front()
@@ -832,13 +831,17 @@ cdef class PressureThresholdModel(DiffusionModel):
             for edge_idx in range(self.starts[node], range_end):
                 child = self.edges[edge_idx]
 
+                """(Fix 1): We now need to increment buckets even if the child node has already been activated
+                    because the bucket is used for the nodes outgoing influence adjustment calculation"""
+                if buckets.count(child) == 0:
+                    buckets[child] = 0.
+                    0
+                buckets[child] += self.influence[edge_idx]
+
                 # Child has _not_ been activated yet
                 if seen_set.find(child) == seen_set.end():
-                    child = self.edges[edge_idx]
 
-                    # Lazy evaluation for buckets and thresholds
-                    if buckets.count(child) == 0:
-                        buckets[child] = 0.0
+                    # Lazy evaluation for thresholds
                     if thresholds.count(child) == 0:
                         thresholds[child] = random_standard_uniform(self.bitgen_state)
                         while thresholds[child] == 0.0:
@@ -847,25 +850,27 @@ cdef class PressureThresholdModel(DiffusionModel):
                             )
 
                     threshold = thresholds[child]
-                    # Function is written so that each edge is traversed _once_
-                    assert buckets[child] < threshold
+                    """This assertion no longer holds true for pressure diffusion.
+                        because buckets are incremented in the adjustment phase, its possible
+                        for a bucket to exceed a threshold before this assertion"""
+                    # assert buckets[child] < threshold
 
-                    buckets[child] += self.influence[edge_idx]
 
                     # Skip if we don't have enough influence yet.
                     if buckets[child] < threshold:
                         continue
 
-                    printf("Child %u: bucket = %f, threshold = %f\n", child, buckets[child], threshold)
-
                     work_deque.push_back(child)
                     seen_set.insert(child)
 
+        # Adjust outgoing edges in this phase
         for node in work_deque:
             range_end = len(self.edges)
             if node + 1 < len(self.starts):
                 range_end = self.starts[node + 1]
 
             for edge_idx in range(self.starts[node], range_end):
-                updated_weight = self.influence[edge_idx] + self.alpha * buckets[node]
-                self.influence[edge_idx] = fmin(1.0, updated_weight)
+                child = self.edges[edge_idx]
+                if seen_set.find(child) == seen_set.end():
+                    updated_weight = self.influence[edge_idx] + self.alpha * buckets[node]
+                    self.influence[edge_idx] = fmin(1.0, updated_weight)
