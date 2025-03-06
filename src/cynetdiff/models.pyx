@@ -603,7 +603,8 @@ cdef class PressureThresholdModel(DiffusionModel):
 
         # Setting the influence sent across each edge
         if influence is not None:
-            raise NotImplementedError("Non-default influence values not currently supported")
+            assert m == len(influence)
+            self.influence_original = influence
         else:
             # Otherwise, default to 1/in_degree
             in_degrees.resize(n)
@@ -617,8 +618,9 @@ cdef class PressureThresholdModel(DiffusionModel):
                 1.0 / in_degrees[out_node]
                 for out_node in self.edges
             )
+            self.influence_original = influence_arr
 
-            self.influence = influence_arr
+        self.influence = self.influence_original
 
         # Verify payoffs
         if self.payoffs is not None:
@@ -640,6 +642,9 @@ cdef class PressureThresholdModel(DiffusionModel):
         self.buckets.clear()
         self.thresholds.clear()
 
+        """Original influence values are saved from initialization of model"""
+        self.influence = self.influence_original
+
         # Reset the work deque
         if len(self.seed_probs) == 0:
             self.work_deque.assign(self.original_seeds.begin(), self.original_seeds.end())
@@ -650,20 +655,6 @@ cdef class PressureThresholdModel(DiffusionModel):
                     self.work_deque.push_back(self.original_seeds[i])
                     self.seen_set.insert(self.original_seeds[i])
 
-        """Reset edge weights to 1 / in_degree (not implemented for custom influence weights)"""
-        cdef cvector[unsigned int] in_degrees
-        cdef unsigned int n = len(self.starts)
-        in_degrees.resize(n)
-        fill(in_degrees.begin(), in_degrees.end(), 0)
-
-        for out_node in self.edges:
-            in_degrees[out_node] += 1
-
-        influence_arr = array.array("f")
-        for out_node in self.edges:
-            influence_arr.extend([1.0 / in_degrees[out_node]])
-
-        self.influence = influence_arr
 
     def get_newly_activated_nodes(self):
         for node in self.work_deque:
@@ -759,6 +750,7 @@ cdef class PressureThresholdModel(DiffusionModel):
             seen_set.clear()
             seen_set.insert(original_seeds.begin(), original_seeds.end())
             buckets.clear()
+            self.influence = self.influence_original
 
             while work_deque.size() > 0:
                 results[0] += self._compute_payoff(work_deque, self.payoffs)

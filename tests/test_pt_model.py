@@ -211,14 +211,15 @@ def get_thresholds(graph: nx.DiGraph) -> array.array:
 # Start of actual test code
 
 @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-def test_randomized_activation(seed: int) -> None:
+@pytest.mark.parametrize("alpha", [0.1])
+def test_randomized_activation(seed: int, alpha: float) -> None:
     n = 100
     k = 10
     p = 0.01
 
     # Create random graph and initialize model
     graph = generate_random_graph_from_seed(n, p, True, False, False, seed=seed)
-    model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
+    model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
 
     random.seed(seed)
     seeds = random.sample(list(graph.nodes), k)
@@ -235,41 +236,43 @@ def test_randomized_activation(seed: int) -> None:
         assert (seed_node in activated_nodes) == (prob == 1.0)
 
 
-# @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-# def test_model_payoffs(seed: int) -> None:
-#     n = 10_000
-#     k = 10
-#     p = 0.01
+@pytest.mark.parametrize("seed", [12345, 505050, 2024])
+@pytest.mark.parametrize("alpha", [0.1])
+def test_model_payoffs(seed: int, alpha: float) -> None:
+    n = 10_000
+    k = 10
+    p = 0.01
 
-#     # Just trying the main functions with no set thresholds
-#     graph = generate_random_graph_from_seed(n, p, True, False, True, seed=seed)
-#     model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
-#     random.seed(seed)
-#     seeds = set(random.sample(list(graph.nodes), k))
+    # Just trying the main functions with no set thresholds
+    graph = generate_random_graph_from_seed(n, p, True, False, True, seed=seed)
+    model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
+    random.seed(seed)
+    seeds = set(random.sample(list(graph.nodes), k))
 
-#     # Run the model
-#     model.set_seeds(seeds)
-#     model.advance_until_completion()
-#     payoff_score = model.compute_payoffs()
+    # Run the model
+    model.set_seeds(seeds)
+    model.advance_until_completion()
+    payoff_score = model.compute_payoffs()
 
-#     # Compute score manually and compare
-#     manual_score = 0.0
-#     for node in model.get_activated_nodes():
-#         manual_score += graph.nodes[node]["payoff"]
+    # Compute score manually and compare
+    manual_score = 0.0
+    for node in model.get_activated_nodes():
+        manual_score += graph.nodes[node]["payoff"]
 
-#     assert math.isclose(payoff_score, manual_score, abs_tol=0.05)
+    assert math.isclose(payoff_score, manual_score, abs_tol=0.05)
 
 
 @pytest.mark.parametrize("directed", [True, False])
 @pytest.mark.parametrize("seed", [12345, 505050, 2024])
-def test_model_rng_seed(directed: bool, seed: int) -> None:
+@pytest.mark.parametrize("alpha", [0.01])
+def test_model_rng_seed(directed: bool, seed: int, alpha: float) -> None:
     n = 10000
-    k = 5
-    p = 0.001
+    k = 10
+    p = 0.0001
     num_runs = 10
     # Just trying the main functions with no set thresholds
     graph = generate_random_graph_from_seed(n, p, directed, False, False, seed=seed)
-    model, _ = networkx_to_pt_model(graph, 0.1, rng=seed)
+    model, _ = networkx_to_pt_model(graph, alpha=alpha, rng=seed)
 
     random.seed(seed)
     seeds = set(random.sample(list(graph.nodes), k))
@@ -300,8 +303,9 @@ def test_model_rng_seed(directed: bool, seed: int) -> None:
 
 
 @pytest.mark.parametrize("directed", [True, False])
-@pytest.mark.parametrize("nondefault_influence", [False])
-def test_specific_model(directed: bool, nondefault_influence: bool) -> None:
+@pytest.mark.parametrize("nondefault_influence", [True, False])
+@pytest.mark.parametrize("alpha", [0.1])
+def test_specific_model(directed: bool, nondefault_influence: bool, alpha: float) -> None:
     n = 500
     p = 0.005
     k = 10
@@ -316,9 +320,9 @@ def test_specific_model(directed: bool, nondefault_influence: bool) -> None:
     nodes = list(test_graph.nodes)
     seeds = random.sample(nodes, k)
 
-    activated_nodes_levels = pressure_threshold(test_graph, seeds, 0.1)
+    activated_nodes_levels = pressure_threshold(test_graph, seeds, alpha=alpha)
 
-    model, _ = networkx_to_pt_model(test_graph, 0.1)
+    model, _ = networkx_to_pt_model(test_graph, alpha=alpha)
 
     model.set_seeds(seeds)
     seen_set = set()
@@ -387,7 +391,8 @@ def compute_graph_marginal_gain(
 @pytest.mark.parametrize("nondefault_influence", [False])
 @pytest.mark.parametrize("include_payoffs", [True, False])
 @pytest.mark.parametrize("seed", [12345, 505050])
-def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payoffs: bool, seed: int) -> None:
+@pytest.mark.parametrize("alpha", [0.1])
+def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payoffs: bool, seed: int, alpha: float) -> None:
     """
     Test the marginal gain function under a couple of parameter settings.
     """
@@ -401,11 +406,11 @@ def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payof
     seeds = random.sample(nodes, k)
 
     # Set up the model
-    model, _ = networkx_to_pt_model(test_graph, 0)
+    model, _ = networkx_to_pt_model(test_graph, alpha=alpha)
     node_thresholds = get_thresholds(test_graph)
 
     result = model.compute_marginal_gains(seeds, [], 1, _node_thresholds=node_thresholds)[0]
-    total_activated = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, seeds, 0))
+    total_activated = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, seeds, alpha=alpha))
 
     assert math.isclose(result, total_activated, abs_tol=0.05)
 
@@ -417,9 +422,9 @@ def test_marginal_gain(directed: bool, nondefault_influence: bool, include_payof
     set_so_far: t.List[int] = []
 
     for seed, result in zip(seeds, results[1:]):
-        without_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far, 0))
+        without_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far, alpha=alpha))
 
-        with_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far + [seed], 0))
+        with_new_seed_total = compute_graph_marginal_gain(test_graph, pressure_threshold(test_graph, set_so_far + [seed], alpha=alpha))
 
         marg_gain = with_new_seed_total - without_new_seed_total
 
