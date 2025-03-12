@@ -7,6 +7,7 @@ from libcpp.vector cimport vector as cvector
 from libcpp.unordered_map cimport unordered_map as cmap
 from libc.math cimport fmin
 from libc.stdio cimport printf
+from libc.string cimport memcpy
 
 cimport cython
 import numpy.random as npr
@@ -620,7 +621,9 @@ cdef class PressureThresholdModel(DiffusionModel):
             )
             self.influence_original = influence_arr
 
-        self.influence = self.influence_original
+        influence_buf = array.array("f", [0.0] * m)
+        self.influence = influence_buf
+        memcpy(&self.influence[0], &self.influence_original[0], m * sizeof(float))
 
         # Verify payoffs
         if self.payoffs is not None:
@@ -643,7 +646,7 @@ cdef class PressureThresholdModel(DiffusionModel):
         self.thresholds.clear()
 
         """Original influence values are saved from initialization of model"""
-        self.influence = self.influence_original
+        memcpy(&self.influence[0], &self.influence_original[0], self.influence.shape[0] * sizeof(float))
 
         # Reset the work deque
         if len(self.seed_probs) == 0:
@@ -750,7 +753,7 @@ cdef class PressureThresholdModel(DiffusionModel):
             seen_set.clear()
             seen_set.insert(original_seeds.begin(), original_seeds.end())
             buckets.clear()
-            self.influence = self.influence_original
+            memcpy(&self.influence[0], &self.influence_original[0], self.influence.shape[0] * sizeof(float))
 
             while work_deque.size() > 0:
                 results[0] += self._compute_payoff(work_deque, self.payoffs)

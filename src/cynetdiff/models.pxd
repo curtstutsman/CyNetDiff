@@ -89,7 +89,7 @@ cdef class LinearThresholdModel(DiffusionModel):
 
 cdef class PressureThresholdModel(DiffusionModel):
     cdef float[:] influence
-    cdef readonly float[:] influence_original
+    cdef float[:] influence_original
     cdef readonly float alpha
 
     # Model simulation data structures
